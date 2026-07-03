@@ -1,0 +1,230 @@
+PaperShredderGenerator/
+│
+├── README.md
+├── LICENSE
+├── generate_model.py          # Main script
+├── modules/
+│   ├── body.py
+│   ├── blades.py
+│   ├── gearbox.py
+│   ├── generator.py
+│   ├── battery.py
+│   ├── frame.py
+│   ├── materials.py
+│   └── utils.py
+│
+├── assets/
+│   └── preview.png
+│
+└── docs/
+    └── assembly.png
+
+import bpy
+import math
+from math import radians
+
+# -------------------------------------------------
+# Paper Shredder Blades
+# Blender 4.3
+# -------------------------------------------------
+
+def create_shredder_blades():
+
+    blade_radius = 0.045
+    blade_thickness = 0.003
+    shaft_radius = 0.010
+    shaft_length = 0.32
+
+    spacing = 0.006
+    blade_count = 26
+
+    shaft_positions = [-0.028, 0.028]
+
+    for shaft_y in shaft_positions:
+
+        # Shaft
+        bpy.ops.mesh.primitive_cylinder_add(
+            radius=shaft_radius,
+            depth=shaft_length,
+            location=(0, shaft_y, 0.12),
+            rotation=(radians(90), 0, 0)
+        )
+
+        shaft = bpy.context.object
+        shaft.name = f"Shaft_{shaft_y:.2f}"
+
+        # Cutting discs
+        for i in range(blade_count):
+
+            x = -shaft_length/2 + i * spacing
+
+            bpy.ops.mesh.primitive_cylinder_add(
+                vertices=32,
+                radius=blade_radius,
+                depth=blade_thickness,
+                location=(x, shaft_y, 0.12),
+                rotation=(radians(90), 0, 0)
+            )
+
+            blade = bpy.context.object
+            blade.name = f"Blade_{i}"
+
+            # Alternate rotation
+            blade.rotation_euler[1] = radians((i % 2) * 8)
+
+# -------------------------------------------------
+
+if __name__ == "__main__":
+    create_shredder_blades()
+
+import bpy
+from math import radians
+
+# -------------------------------------------------
+# Gearbox + Generator
+# Blender 4.3
+# -------------------------------------------------
+
+def make_material(name, color):
+    mat = bpy.data.materials.get(name)
+    if mat is None:
+        mat = bpy.data.materials.new(name)
+        mat.use_nodes = True
+
+    bsdf = mat.node_tree.nodes["Principled BSDF"]
+    bsdf.inputs["Base Color"].default_value = color
+
+    return mat
+
+
+steel = make_material("Steel", (0.55, 0.55, 0.58, 1))
+dark = make_material("Dark", (0.12, 0.12, 0.12, 1))
+
+
+def create_gear(location, radius, thickness, teeth=24, name="Gear"):
+
+    bpy.ops.mesh.primitive_cylinder_add(
+        vertices=teeth,
+        radius=radius,
+        depth=thickness,
+        location=location,
+        rotation=(radians(90), 0, 0)
+    )
+
+    gear = bpy.context.object
+    gear.name = name
+    gear.data.materials.append(steel)
+
+    return gear
+
+
+def create_generator():
+
+    # Generator body
+    bpy.ops.mesh.primitive_cylinder_add(
+        radius=0.055,
+        depth=0.16,
+        location=(0.28, 0.13, 0.12),
+        rotation=(radians(90), 0, 0)
+    )
+
+    body = bpy.context.object
+    body.name = "GeneratorBody"
+    body.data.materials.append(dark)
+
+    # Rotor
+    bpy.ops.mesh.primitive_cylinder_add(
+        radius=0.025,
+        depth=0.18,
+        location=(0.28, 0.13, 0.12),
+        rotation=(radians(90), 0, 0)
+    )
+
+    rotor = bpy.context.object
+    rotor.name = "GeneratorRotor"
+    rotor.data.materials.append(steel)
+
+
+def create_flywheel():
+
+    bpy.ops.mesh.primitive_torus_add(
+        major_radius=0.065,
+        minor_radius=0.010,
+        location=(0.15, 0.13, 0.12),
+        rotation=(radians(90), 0, 0)
+    )
+
+    flywheel = bpy.context.object
+    flywheel.name = "Flywheel"
+    flywheel.data.materials.append(steel)
+
+
+def create_gearbox():
+
+    # Gearbox housing
+    bpy.ops.mesh.primitive_cube_add(
+        size=1,
+        location=(0.15, 0.07, 0.12)
+    )
+
+    housing = bpy.context.object
+    housing.scale = (0.09, 0.05, 0.06)
+    housing.name = "GearboxHousing"
+    housing.data.materials.append(dark)
+
+    # Drive gears
+    create_gear((0.02, 0.07, 0.12), 0.040, 0.012, 24, "DriveGear1")
+    create_gear((0.09, 0.07, 0.12), 0.030, 0.012, 20, "DriveGear2")
+    create_gear((0.15, 0.07, 0.12), 0.055, 0.015, 32, "MainGear")
+
+
+def build():
+
+    create_gearbox()
+    create_flywheel()
+    create_generator()
+
+
+if __name__ == "__main__":
+    build()
+
+import bpy
+import os
+import sys
+
+# -------------------------------------------------
+# Paper Shredder Generator
+# Main Assembly Script
+# Blender 4.3
+# -------------------------------------------------
+
+# Clear the scene
+bpy.ops.object.select_all(action='SELECT')
+bpy.ops.object.delete(use_global=False)
+
+# Add the modules folder to Python's path
+project_dir = os.path.dirname(bpy.data.filepath)
+modules_dir = os.path.join(project_dir, "modules")
+
+if modules_dir not in sys.path:
+    sys.path.append(modules_dir)
+
+# Import project modules
+import body
+import blades
+import gearbox
+
+# -----------------------------
+# Build the machine
+# -----------------------------
+
+print("Creating body...")
+body.create_body()
+
+print("Creating shredder blades...")
+blades.create_shredder_blades()
+
+print("Creating gearbox and generator...")
+gearbox.build()
+
+print("Model generation complete!")
